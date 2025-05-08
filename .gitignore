@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.sqlite3
+env/
+*.env
+
+# Django
+/staticfiles/
+db.sqlite3
+/media/
+
+# React
+node_modules/
+build/
+dist/
+.env
+
+# General
+*.log
+.DS_Store
+*.bak

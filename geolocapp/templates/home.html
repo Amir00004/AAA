@@ -1,0 +1,29 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% load static %}
+    <title>Doctor Locator</title>
+
+    <!-- Leaflet.js for OpenStreetMap -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <style>
+        #map { height: 400px; width: 100%; margin-top: 10px; }
+        ul { list-style-type: none; padding: 0; }
+        li { padding: 5px; background: #f8f9fa; margin: 5px 0; border-radius: 5px; }
+        button { padding: 10px; background: blue; color: white; border: none; cursor: pointer; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Find a Doctor Near You</h1>
+    <button id="get-location">Find Doctor</button>
+
+    <h2>Closest Doctor:</h2>
+    <div id="map"></div>
+
+    <h2>Top 3 Nearby Doctors:</h2>
+    <ul id="doctor-list"></ul>
+
+    <script src="{% static 'scripts.js' %}"></script>
+</body>

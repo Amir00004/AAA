@@ -1,0 +1,58 @@
+
+.custom-event-style {
+    min-height: 60px !important;       
+    display: flex !important;
+    flex-direction: column;
+    justify-content: center;
+    padding: 8px 12px 8px 12px !important;
+    font-size: 16px !important;
+    line-height: 0.6 !important;
+  }
+  .fc .fc-timegrid-event {
+    margin: 2px 0 !important;
+  }
+  #calendar {
+    max-width: 900px;
+    margin: 40px auto;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+    padding: 32px 32px 32px 52px;
+  }
+  .fc-toolbar-title {
+    color: #2a4365;
+    font-size: 2rem;
+    font-weight: 600;
+  }
+  .fc-col-header-cell-cushion {
+    color: #3182ce;
+    font-weight: 500;
+    font-size: 1.1rem;
+  }
+  .fc-timegrid-slot-label {
+    color: #4a5568;
+    font-size: 1rem;
+  }
+  .fc-event {
+    background-color: #38b2ac !important;
+    border: none !important;
+    color: #fff !important;
+    border-radius: 8px !important;
+    font-size: 1rem;
+    font-weight: 500;
+  }
+  .fc-day-today {
+    background: #ebf8ff !important;
+  }
+  /* Button styling */
+  .fc-button {
+    background: #3182ce !important;
+    border: none !important;
+    color: #fff !important;
+    border-radius: 6px !important;
+    font-weight: 500;
+    transition: background 0.2s;
+  }
+  .fc-button:hover {
+    background: #2b6cb0 !important;
+  }  
