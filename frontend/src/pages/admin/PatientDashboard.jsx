@@ -4,7 +4,6 @@ import {
   Calendar,
   FileText,
   CreditCard,
-  ScanBarcodeIcon,
   Shield,
 } from "lucide-react";
 import { getUser } from "../../pages/admin/admin";
@@ -15,13 +14,38 @@ import PatientCalendar from "../../components/Admin/PatientCalendar";
 import ScanUpload from "../../components/ScanUpload";
 import Navbar from "../../components/Admin/Navbar";
 
+
 const PatientDashboard = () => {
   const [activeTab, setActiveTab] = useState("overview");
   const [userData, setUserData] = useState(null);
-  const [scanUrl, setScanUrl] = useState(null);
+  const [scanImages, setScanImages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [appointments, setAppointments] = useState([]);
   const [error, setError] = useState("");
+  const [predictionResult, setPredictionResult] = useState(null);
+  const [predictionError, setPredictionError] = useState("");
+
+  const fetchUserData = async () => {
+    try {
+      const storedUser = JSON.parse(localStorage.getItem("user"));
+      if (!storedUser) {
+        setError("No user found.");
+        return;
+      }
+      if (!storedUser?.id) {
+        setError("Invalid user data.");
+        return;
+      }
+      const response = await getUser(storedUser.id);
+      setUserData(response);
+      setScanImages(response?.patient?.scan_images || []);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to fetch user data.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     const fetchAppointments = async () => {
@@ -39,31 +63,37 @@ const PatientDashboard = () => {
       }
     };
 
-    const fetchUserData = async () => {
-      try {
-        const storedUser = JSON.parse(localStorage.getItem("user"));
-        if (!storedUser) {
-          setError("No user found.");
-          return;
-        }
-        if (!storedUser?.id) {
-          setError("Invalid user data.");
-          return;
-        }
-        const response = await getUser(storedUser.id);
-        setUserData(response);
-        setScanUrl(response?.patient?.scan_image || null);
-      } catch (err) {
-        console.error(err);
-        setError("Failed to fetch user data.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchUserData();
     fetchAppointments();
   }, []);
+
+  const handlePassToAI = async (imageUrl) => {
+    try {
+      setPredictionError("");
+      setPredictionResult(null);
+
+      const response = await fetch(`${imageUrl}`);
+      const blob = await response.blob();
+      const formData = new FormData();
+      formData.append("scan", blob, "scan.png");
+
+      const predictResponse = await api.post("/api/users/predict/", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+      console.log("Prediction response:", predictResponse.data);
+      predictResponse.data.image = imageUrl;
+      setPredictionResult(predictResponse.data);
+    } catch (err) {
+      console.error("Prediction error:", err);
+      setPredictionError("Failed to get prediction. Please try again.");
+    }
+  };
+
+  const handleUploadSuccess = () => {
+    fetchUserData(); // Refresh scan images after successful upload
+  };
 
   const renderOverview = () => (
     <div className="space-y-6">
@@ -93,7 +123,7 @@ const PatientDashboard = () => {
             <FileText className="h-8 w-8 text-amber-500" />
             <div className="ml-4">
               <p className="text-sm text-gray-500">Scans Uploaded</p>
-              <p className="text-2xl font-semibold text-gray-900">{scanUrl ? 1 : 0}</p>
+              <p className="text-2xl font-semibold text-gray-900">{scanImages.length}</p>
             </div>
           </div>
         </div>
@@ -190,32 +220,64 @@ const PatientDashboard = () => {
 
   const renderScans = () => (
     <div className="bg-white rounded-xl shadow-sm p-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-6">Uploaded Lab Scan</h3>
-      {scanUrl ? (
-        <div className="flex flex-col items-center">
-          <img
-            src={`http://127.0.0.1:8000${scanUrl}`}
-            alt="Scan"
-            className="w-full max-w-md rounded-xl shadow-sm border border-gray-200"
-          />
-          <div className="mt-6 space-x-4">
-            <a
-              href={`http://127.0.0.1:8000${scanUrl}`}
-              download
-              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
-            >
-              Download Scan
-            </a>
-            <a
-              href={`http://127.0.0.1:8000${scanUrl}`}
-              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
-            >
-              Pass to AI
-            </a>
-          </div>
+      <h3 className="text-lg font-semibold text-gray-900 mb-6">Uploaded Lab Scans</h3>
+      {scanImages.length > 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+          {scanImages.map((scan) => (
+            <div key={scan.id} className="flex flex-col items-center">
+              <img
+                src={`${scan.image}`}
+                alt={`Scan ${scan.id}`}
+                className="w-full max-w-xs rounded-xl shadow-sm border border-gray-200"
+              />
+              <p className="text-sm text-gray-500 mt-2">
+                Uploaded: {new Date(scan.uploaded_at).toLocaleDateString()}
+              </p>
+              <div className="mt-4 space-x-4">
+                <a
+                  href={`${scan.image}`}
+                  download
+                  className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
+                >
+                  Download
+                </a>
+                <button
+                  onClick={() => {
+                    handlePassToAI(scan.image);
+                    document.getElementById('results')?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition"
+                >
+                  Pass to AI
+                </button>
+                
+              </div>
+            </div>
+          ))}
+          
         </div>
+        
       ) : (
-        <p className="text-gray-500 italic">No scan uploaded yet.</p>
+        <p className="text-gray-500 italic">No scans uploaded yet.</p>
+      )}
+      {predictionResult && (
+        <div id="results" className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+          <h2 className="text-lg font-semibold mb-2">Preview:</h2>
+          <img src={predictionResult.image} alt="Scan Preview" className="w-full max-w-md rounded-lg shadow" />*
+          <h4 className="text-lg font-semibold text-gray-900">AI Prediction Results</h4>
+          <p className="text-sm text-gray-900">
+            <strong>Normal:</strong> {(predictionResult.normal * 100).toFixed(2)}%
+          </p>
+          <p className="text-sm text-gray-900">
+            <strong>Lung Opacity:</strong> {(predictionResult.lungop * 100).toFixed(2)}%
+          </p>
+          <p className="text-sm text-gray-900">
+            <strong>Pneumonia:</strong> {(predictionResult.pneumonia * 100).toFixed(2)}%
+          </p>
+        </div>
+      )}
+      {predictionError && (
+        <p className="mt-4 text-red-500">{predictionError}</p>
       )}
       <div className="mt-6">
         <ScanUpload />
@@ -367,4 +429,4 @@ const PatientDashboard = () => {
   );
 };
 
-export default PatientDashboard;
+export default PatientDashboard;  

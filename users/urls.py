@@ -3,17 +3,15 @@ from django.conf import settings
 from django.conf.urls.static import static
 from .views import (
     RegisterView, AdminOnlyView, DoctorOnlyView, AdminUploadScanView,
-      PatientOnlyView, PatientDetailView,
-      DoctorListCreateView, DoctorDetailView,
-      PredictView,
-      AdminUserListView, AdminUserUpdateView, AdminUserDeleteView, AdminUserDetailView, AdminCreateUserView,
-      AvailableSlotCreateView, AvailableSlotListView, AppointmentCreateView, DoctorAllSlotsView, PatientAppointmentListView
-      )
+    PatientOnlyView, PatientDetailView,
+    DoctorListCreateView, DoctorDetailView,
+    PredictView,
+    AdminUserListView, AdminUserUpdateView, AdminUserDeleteView, AdminUserDetailView, AdminCreateUserView,
+    AvailableSlotCreateView, AvailableSlotListView, AppointmentCreateView, DoctorAllSlotsView, PatientAppointmentListView
+)
 
 urlpatterns = [
-    # path('register/', RegisterView.as_view(), name='register'),
-    # path('login/', LoginView.as_view(), name='login'),
-    path("admin/patients/<int:pk>/upload-scan/", AdminUploadScanView.as_view(), name="admin-upload-scan"),
+    path("admin/patients/<int:patient_id>/upload-scan/", AdminUploadScanView.as_view(), name="admin-upload-scan"),
     path('admin-only/', AdminOnlyView.as_view(), name='admin-only'),
     path('doctor-only/', DoctorOnlyView.as_view(), name='doctor-only'),
     path('patient-only/', PatientOnlyView.as_view(), name='patient-only'),
@@ -31,5 +29,4 @@ urlpatterns = [
     path('slots/all/', DoctorAllSlotsView.as_view(), name='doctor-slots'),
     path("patient/appointments/", PatientAppointmentListView.as_view(), name="patient-appointments"),
     path('predict/', PredictView.as_view(), name='predict'),
-    
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

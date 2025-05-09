@@ -8,11 +8,11 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth.hashers import make_password
 from rest_framework.views import APIView
 from rest_framework.generics import CreateAPIView
-from .serializers import AvailableSlotSerializer, AppointmentSerializer, UserSerializer, PatientSerializer, DoctorSerializer, UserCreateSerializer, UserUpdateSerializer,AdminUploadScanSerializer
+from .serializers import AvailableSlotSerializer, AppointmentSerializer, UserSerializer, PatientSerializer, DoctorSerializer, UserCreateSerializer, UserUpdateSerializer, AdminUploadScanSerializer
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework import viewsets, permissions
 from .permissions import IsAdmin, IsDoctor, IsPatient
-from .models import CustomUser, Patient, Doctor, AvailableSlot, Appointment
+from .models import CustomUser, Patient, Doctor, AvailableSlot, Appointment, ScanImage
 from django.core.mail import EmailMessage
 from django.conf import settings
 from rest_framework.views import APIView
@@ -23,7 +23,6 @@ from keras.models import load_model
 from PIL import Image
 import numpy as np
 import io
-
 
 User = get_user_model()
 
@@ -37,23 +36,18 @@ class RegisterView(APIView):
             user = serializer.save()
             return Response({"message": "User created successfully!", "user_id": user.id}, status=status.HTTP_201_CREATED)
         
-
         return Response({"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
-
         token['name'] = user.first_name if user.first_name.strip() else "test"
         token['role'] = user.role 
-
         return token
 
     def validate(self, attrs):
         data = super().validate(attrs)
-        
         user = self.user
 
         if not user.is_active:
@@ -69,16 +63,6 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
-
-# class LoginView(generics.GenericAPIView):
-#     serializer_class = LoginSerializer
-#     permission_classes = [AllowAny]  
-
-#     def post(self, request, *args, **kwargs):
-#         serializer = self.get_serializer(data=request.data)
-#         serializer.is_valid(raise_exception=True)  
-#         refresh = RefreshToken.for_user(user)
-#         return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
@@ -130,8 +114,6 @@ class AdminOnlyView(APIView):
         serializer = UserSerializer(users, many=True)
         return Response({"message": "User registered successfully"}, status=status.HTTP_201_CREATED)
 
-    
-
 class DoctorOnlyView(generics.RetrieveAPIView):
     serializer_class = DoctorSerializer
     permission_classes = [IsAuthenticated, IsDoctor]
@@ -144,8 +126,7 @@ class PatientOnlyView(generics.RetrieveAPIView):
     permission_classes = [IsAuthenticated, IsPatient]
 
     def get_object(self):
-        return self.request.user.patient
-
+        return self.request.user.patient_profile
     
 class PatientDetailView(generics.RetrieveAPIView):
     queryset = Patient.objects.all()
@@ -156,37 +137,22 @@ class DoctorListCreateView(generics.ListCreateAPIView):
     queryset = Doctor.objects.all()
     serializer_class = DoctorSerializer
 
-
 class DoctorDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Doctor.objects.all()
     serializer_class = DoctorSerializer
 
-
-class AdminUploadScanView(generics.UpdateAPIView):
-    queryset = Patient.objects.all()
+class AdminUploadScanView(generics.CreateAPIView):
     serializer_class = AdminUploadScanSerializer
     permission_classes = [IsAuthenticated, IsAdmin]
 
-    def update(self, request, *args, **kwargs):
-        response = super().update(request, *args, **kwargs)
-
-        patient = self.get_object()
-        user_email = patient.user.email
-        scan = patient.scan_image
-
-        if scan:
-            email = EmailMessage(
-                subject="Your Scan Result is Ready",
-                body=f"Dear {patient.user.first_name},\n\nYour lab scan has been uploaded. Please find it attached.",
-                from_email="zedsuu123@gmail.com",
-                to=[user_email],
-            )
-            email.attach(scan.name, scan.read(), "image/png")
-            email.send()
-            print(f"done: {user_email}")
-
-        return response
-    
+    def create(self, request, *args, **kwargs):
+        patient_id = self.kwargs.get('patient_id')
+        patient = get_object_or_404(Patient, id=patient_id)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        scan_image = serializer.save(patient=patient)
+            
+        return Response({"message": "Scan uploaded successfully"}, status=status.HTTP_201_CREATED)
 
 class AvailableSlotCreateView(generics.CreateAPIView):
     queryset = AvailableSlot.objects.all()
@@ -196,14 +162,12 @@ class AvailableSlotCreateView(generics.CreateAPIView):
     def perform_create(self, serializer):
         serializer.save(doctor=self.request.user)
 
-# Patients view slots
 class AvailableSlotListView(generics.ListAPIView):
     serializer_class = AvailableSlotSerializer
     permission_classes = [IsAuthenticated, IsPatient]
 
     def get_queryset(self):
         return AvailableSlot.objects.filter(is_booked=False).order_by("date", "start_time")
-
 
 class AppointmentCreateView(generics.CreateAPIView):
     queryset = Appointment.objects.all()
@@ -231,15 +195,12 @@ class AppointmentCreateView(generics.CreateAPIView):
         serializer = self.get_serializer(appointment)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-
 class DoctorAllSlotsView(generics.ListAPIView):
     serializer_class = AvailableSlotSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
-        
-        # Ensure the user is a doctor
         if user.role != 'doctor':
             return AvailableSlot.objects.none()  
         return AvailableSlot.objects.filter(doctor=user).order_by("date", "start_time")
@@ -253,8 +214,6 @@ class PatientAppointmentListView(generics.ListAPIView):
     
 class PredictView(APIView):
     parser_classes = [MultiPartParser]
-
-    # Load the model once (globally or in __init__)
     model = load_model('users/models/prrr.keras')
 
     def post(self, request, *args, **kwargs):
@@ -270,6 +229,7 @@ class PredictView(APIView):
 
             prediction = self.model.predict(img_array)
             result = prediction.tolist() 
+            print(request)
             print("Prediction result:", result)
             normal = result[0][1]
             lungop = result[0][0]
@@ -278,7 +238,7 @@ class PredictView(APIView):
                 'normal': normal,
                 'lungop' : lungop,
                 'pneumonia' : pneumonia,
-                })
+            })
         except Exception as e:
             print("Prediction error:", e)
             return Response({'error': 'Prediction failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

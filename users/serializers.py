@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import Patient, Doctor, CustomUser, AvailableSlot, Appointment
+from .models import Patient, Doctor, CustomUser, AvailableSlot, Appointment, ScanImage
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 User = get_user_model()
@@ -10,22 +10,19 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
-        token["role"] = user.role  # Add role to the token
+        token["role"] = user.role
         token["name"] = user.get_full_name() 
         return token
     
-
 class NullableIntegerField(serializers.IntegerField):
     def to_internal_value(self, data):
-        if data == "":  # Convert empty string to None
+        if data == "":
             return None
         return super().to_internal_value(data)
     
 class UserCreateSerializer(serializers.ModelSerializer):
     gender = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
     medical_history = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
-
-    # Optional fields for doctors
     specialization = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
     experience_years = NullableIntegerField(required=False, allow_null=True, default=None)
     license_number = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
@@ -42,11 +39,8 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         role = validated_data.get("role")
-
-        # Extract fields that belong to related models
         gender = validated_data.pop("gender", None)
         medical_history = validated_data.pop("medical_history", None)
-
         specialization = validated_data.pop("specialization", None)
         experience_years = validated_data.pop("experience_years", None)
         license_number = validated_data.pop("license_number", None)
@@ -70,7 +64,6 @@ class UserCreateSerializer(serializers.ModelSerializer):
 class UserUpdateSerializer(serializers.ModelSerializer):
     gender = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
     medical_history = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
-
     specialization = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
     experience_years = NullableIntegerField(required=False, allow_null=True, default=None)
     license_number = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
@@ -89,20 +82,16 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         }
 
     def update(self, instance, validated_data):
-        role = instance.role  # Keep the original role
-
-        # Update base user fields
+        role = instance.role
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
 
-        # Update related models based on role
         if role == "patient":
             patient, _ = Patient.objects.get_or_create(user=instance)
             patient.gender = validated_data.get("gender", patient.gender)
             patient.medical_history = validated_data.get("medical_history", patient.medical_history)
             patient.save()
-
         elif role == "doctor":
             doctor, _ = Doctor.objects.get_or_create(user=instance)
             doctor.specialization = validated_data.get("specialization", doctor.specialization)
@@ -113,17 +102,25 @@ class UserUpdateSerializer(serializers.ModelSerializer):
 
         return instance
 
+class ScanImageSerializer(serializers.ModelSerializer):
+    image = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ScanImage
+        fields = ["id", "image", "uploaded_at"]
+
+    def get_image(self, obj):
+        request = self.context.get("request")
+        if obj.image and hasattr(obj.image, 'url'):
+            return request.build_absolute_uri(obj.image.url)
+        return None
+
 class PatientSerializer(serializers.ModelSerializer):
-    scan_image = serializers.SerializerMethodField()
+    scan_images = ScanImageSerializer(many=True, read_only=True)
+
     class Meta:
         model = Patient
-        fields = ["id", "gender", "medical_history", "scan_image"]
-
-    def get_scan_image(self, obj):
-        request = self.context.get("request")
-        if obj.scan_image and hasattr(obj.scan_image, 'url'):
-            return request.build_absolute_uri(obj.scan_image.url)
-        return None
+        fields = ["id", "gender", "medical_history", "scan_images"]
 
 class DoctorSerializer(serializers.ModelSerializer):
     class Meta:
@@ -132,8 +129,8 @@ class DoctorSerializer(serializers.ModelSerializer):
 
 class AdminUploadScanSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Patient
-        fields = ["scan_image"]
+        model = ScanImage
+        fields = ["image"]
 
 class UserSerializer(serializers.ModelSerializer):
     patient = serializers.SerializerMethodField()
@@ -148,11 +145,13 @@ class UserSerializer(serializers.ModelSerializer):
 
     def get_patient(self, obj):
         if hasattr(obj, "patient_profile"):
+            scan_images = ScanImage.objects.filter(patient=obj.patient_profile)
+            scan_serializer = ScanImageSerializer(scan_images, many=True, context=self.context)
             return {
                 "id": obj.patient_profile.id,
                 "gender": obj.patient_profile.gender,
                 "medical_history": obj.patient_profile.medical_history,
-                "scan_image": obj.patient_profile.scan_image.url if obj.patient_profile.scan_image else None,
+                "scan_images": scan_serializer.data,
             }
         return None
 
@@ -174,12 +173,11 @@ class AvailableSlotSerializer(serializers.ModelSerializer):
         fields = ['id', 'doctor', 'doctor_name', 'date', 'start_time', 'end_time', 'is_booked']
         read_only_fields = ['is_booked']
 
-
 class AppointmentSerializer(serializers.ModelSerializer):
     doctor_first_name = serializers.CharField(source='slot.doctor.first_name', read_only=True)  
     doctor_last_name = serializers.CharField(source='slot.doctor.last_name', read_only=True)
-    appointment_date = serializers.DateField(source='slot.date', read_only=True)  # Fetch appointment date
-    appointment_time = serializers.TimeField(source='slot.start_time', read_only=True)  # Fetch appointment time
+    appointment_date = serializers.DateField(source='slot.date', read_only=True)
+    appointment_time = serializers.TimeField(source='slot.start_time', read_only=True)
 
     class Meta:
         model = Appointment

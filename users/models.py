@@ -54,10 +54,17 @@ class Patient(models.Model):
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name="patient_profile")
     gender = models.CharField(null=True, max_length=10, choices=[("male", "Male"), ("female", "Female"), ("other", "Other")], default="")
     medical_history = models.TextField(null=True, blank=True, default="")
-    scan_image = models.ImageField(upload_to='scan_images/', null=True, blank=True)
 
     def __str__(self):
         return f"{self.user.first_name} {self.user.last_name} - Patient Profile"
+    
+class ScanImage(models.Model):
+    patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name="scan_images")
+    image = models.ImageField(upload_to='scan_images/')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Scan for {self.patient.user.first_name} {self.patient.user.last_name} - {self.uploaded_at}"
     
 class Doctor(models.Model):
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name="doctor_profile")
